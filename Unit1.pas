@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
-  System.Math.Vectors, System.Generics.Collections,
+  System.Math.Vectors, System.Generics.Collections, System.Math,
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, FMX.Types3D,
   FMX.MaterialSources,
   Gorilla.Mesh, Gorilla.Control, Gorilla.Animation,
@@ -12,7 +12,7 @@ uses
   Gorilla.Controller.Passes.Environment, FMX.Controls3D, Gorilla.Light,
   Gorilla.Viewport, Gorilla.Sphere, Gorilla.Material.Default,
   Gorilla.Material.Custom, Gorilla.Material.Lambert, FMX.Controls.Presentation,
-  FMX.StdCtrls;
+  FMX.StdCtrls, Gorilla.Disk;
 
 type
   TFileDropFunc = reference to function(const AFilename : String) : Boolean;
@@ -31,10 +31,14 @@ type
     Button3: TButton;
     GorillaLight4: TGorillaLight;
     GorillaLight5: TGorillaLight;
+    CheckBox1: TCheckBox;
+    GorillaDisk1: TGorillaDisk;
+    GorillaLambertMaterialSource2: TGorillaLambertMaterialSource;
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
+    procedure CheckBox1Change(Sender: TObject);
   private
     FActiveMesh : TGorillaMesh;
     FAnimators : TList<TPoint3DAnimation>;
@@ -58,6 +62,7 @@ type
     procedure Play();
     procedure Reverse();
     procedure Reset();
+    procedure AdjustCamera();
   end;
 
 const
@@ -74,6 +79,7 @@ implementation
 
 uses
   System.Masks, System.RTLConsts, FMX.Utils,
+  Gorilla.Utils.Dialogs,
   Gorilla.DefTypes,
   Gorilla.DAE.Loader,
   Gorilla.FBX.Loader,
@@ -119,8 +125,8 @@ end;
 
 procedure TForm1.LoadModel(const AFileName : String);
 const
-  EXPLOSIVE_DURATION = 2;
-  EXPLOSIVE_STRENGTH = 1;
+  EXPLOSIVE_DURATION = 1;
+  EXPLOSIVE_STRENGTH = 3;
 
   procedure SetupAnimators(AMesh : TGorillaMesh);
   var LAnim : TPoint3DAnimation;
@@ -130,6 +136,7 @@ const
       LLen : Single;
       LDef : TMeshDef;
       LBBox : TBoundingBox;
+      LStrength : TPoint3D;
   begin
     // Only set up an animator if there are triangles to be moved
     if Assigned(AMesh.Def) then
@@ -144,11 +151,9 @@ const
         AMesh.OnMouseLeave := MeshMouseLeave;
 
         // Calculate distance to model center to get the direction
-        LBBox := GorillaModel1.GetVertexDataBoundingBox(TMatrix3D.Identity, false);
         LModelCenter := TPoint3D.Zero;
 
-        LBBox := LDef.GetCombinedBoundingBox();
-        LBBox := LDef.GetBoundingBox(TMatrix3D.Identity, false, true, false);
+        LBBox := AMesh.GetVertexDataBoundingBox(TMatrix3D.Identity, false);
         LMeshCenterPos := LBBox.CenterPoint;
         LLen := LMeshCenterPos.Distance(LModelCenter);
         LDir := (LMeshCenterPos - LModelCenter);
@@ -159,7 +164,10 @@ const
         LAnim.PropertyName := 'Position.Point';
         LAnim.Duration := EXPLOSIVE_DURATION;
         LAnim.StartValue.Point := AMesh.Position.Point;
-        LAnim.StopValue.Point := LAnim.StartValue.Point + (LDir * EXPLOSIVE_STRENGTH);
+
+        LStrength := LBBox.GetSize() * EXPLOSIVE_STRENGTH;
+
+        LAnim.StopValue.Point := LAnim.StartValue.Point + (LDir * LStrength);
 
         FAnimators.Add(LAnim);
       end;
@@ -172,6 +180,9 @@ const
       SetupAnimators(AMesh.Meshes.Items[I]);
   end;
 
+var LBBox : TBoundingBox;
+    LSize : TPoint3D;
+    LMaxScale : Single;
 begin
   // Reset model, animators and environment render pass
   FreeAndNil(FAnimators);
@@ -181,18 +192,25 @@ begin
 
   // Load model
   GorillaModel1.LoadFromFile(nil, AFilename, []);
-//  GorillaModel1.Scale.Point := Point3D(10, 10, 10);
-  GorillaModel1.Position.Y := -5;
+
+  // Adjust the size to fit in a cube of size 50
+  LBBox := GorillaModel1.GetVertexDataBoundingBox(TMatrix3D.Identity, false);
+  LSize := LBBox.GetSize();
+  LSize.X := 10 / LSize.X;
+  LSize.Y := 10 / LSize.Y;
+  LSize.Z := 10 / LSize.Z;
+  LMaxScale := System.Math.Max(LSize.X, System.Math.Max(LSize.Y, LSize.Z));
+  GorillaModel1.Scale.X := LMaxScale;
+  GorillaModel1.Scale.Y := LMaxScale;
+  GorillaModel1.Scale.Z := LMaxScale;
+
+  GorillaModel1.Position.Y := 0;
   GorillaModel1.RotationAngle.X := 180;
 
   // Disable mouse interaction generally
   // In SetupAnimators we will allow mouse interaction on specific meshes
   GorillaModel1.SetHitTestValue(false);
-
-  // Apply environment render pass
-  GorillaRenderPassEnvironment1.IsDynamic := true;
-  GorillaRenderPassEnvironment1.IgnoreControl(GorillaModel1);
-  GorillaModel1.SetEnvironmentMapping(GorillaRenderPassEnvironment1, 1, 0);
+  AdjustCamera();
 
   FAnimators := TList<TPoint3DAnimation>.Create();
   SetupAnimators(GorillaModel1);
@@ -222,7 +240,6 @@ begin
     FAnimators[I].Enabled := false;
     FAnimators[I].Stop();
     FAnimators[I].Inverse := true;
-    FAnimators[I].StartFromCurrent := true;
     FAnimators[I].Enabled := true;
     FAnimators[I].Start();
   end;
@@ -352,6 +369,27 @@ begin
   Reset();
 end;
 
+procedure TForm1.CheckBox1Change(Sender: TObject);
+begin
+  Gorilla.Utils.Dialogs.TProgressForm.Open('Rebuilding shaders ...',
+    procedure(AForm : TProgressForm)
+    begin
+      if CheckBox1.IsChecked then
+      begin
+        GorillaModel1.UnsetAllEnvironmentMappings();
+
+        // Apply environment render pass
+        GorillaRenderPassEnvironment1.IsDynamic := true;
+        GorillaRenderPassEnvironment1.IgnoreControl(GorillaModel1);
+        GorillaModel1.SetEnvironmentMapping(GorillaRenderPassEnvironment1, 1, 0);
+      end
+      else
+      begin
+        GorillaModel1.UnsetAllEnvironmentMappings();
+      end;
+    end);
+end;
+
 procedure TForm1.MeshClick(Sender: TObject);
 var LMesh : TGorillaMesh;
 begin
@@ -377,6 +415,41 @@ var LMesh : TGorillaMesh;
 begin
   LMesh := Sender as TGorillaMesh;
   LMesh.Wireframe := false;
+end;
+
+procedure TForm1.AdjustCamera();
+var LTotalBox : TBoundingBox;
+    LAspect,
+    LTanHalfAngleOfView,
+    LMaxE  : Single;
+    LCamOfs : Single;
+begin
+  // Get the absolute size of our models
+  LTotalBox := GorillaModel1.GetAbsoluteBoundingBox();
+
+  // Calculate the correct distance to the object
+  LMaxE := System.Math.Max(LTotalBox.Width,
+    System.Math.Max(LTotalBox.Height, LTotalBox.Depth));
+  LAspect := GorillaViewport1.Width / GorillaViewport1.Height;
+  LTanHalfAngleOfView := DegToRad(GorillaViewport1.GetDesignCamera().AngleOfView / 2);
+  LTanHalfAngleOfView := Tan(LTanHalfAngleOfView);
+
+  // Place the camera inside of the camera controller, depending on the aspect
+  // ratio of our viewport.
+  if LAspect > 1 then
+  begin
+    // Wider than taller
+    LCamOfs := LMaxE * (2 * ArcTan(LTanHalfAngleOfView) * LAspect);
+    GorillaViewport1.GetDesignCameraController().SetPositionAndAngle(
+      LTotalBox.CenterPoint + Point3D(0, 0, -LCamOfs), TPoint3D.Zero);
+  end
+  else
+  begin
+    // Taller than wider
+    LCamOfs := LMaxE / (2 * LTanHalfAngleOfView * LAspect);
+    GorillaViewport1.GetDesignCameraController().SetPositionAndAngle(
+      LTotalBox.CenterPoint + Point3D(0, 0, -LCamOfs), TPoint3D.Zero);
+  end;
 end;
 
 end.
