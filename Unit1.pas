@@ -43,12 +43,6 @@ type
     FActiveMesh : TGorillaMesh;
     FAnimators : TList<TPoint3DAnimation>;
 
-    class procedure HandleFileDragOver(const AFileFilter : String;
-      const Data: TDragObject; const Point: TPointF;
-      var Operation: TDragOperation);
-    class procedure HandleFileDragDrop(const Data: TDragObject;
-      const Point: TPointF; const ACallback : TFileDropFunc);
-
     procedure MeshClick(Sender: TObject);
     procedure MeshMouseEnter(Sender: TObject);
     procedure MeshMouseLeave(Sender: TObject);
@@ -126,7 +120,7 @@ end;
 procedure TForm1.LoadModel(const AFileName : String);
 const
   EXPLOSIVE_DURATION = 1;
-  EXPLOSIVE_STRENGTH = 3;
+  EXPLOSIVE_STRENGTH = 2;
 
   procedure SetupAnimators(AMesh : TGorillaMesh);
   var LAnim : TPoint3DAnimation;
@@ -153,10 +147,10 @@ const
         // Calculate distance to model center to get the direction
         LModelCenter := TPoint3D.Zero;
 
-        LBBox := AMesh.GetVertexDataBoundingBox(TMatrix3D.Identity, false);
+        LBBox := AMesh.GetVertexDataBoundingBox(AMesh.AbsoluteMatrix, true);
         LMeshCenterPos := LBBox.CenterPoint;
         LLen := LMeshCenterPos.Distance(LModelCenter);
-        LDir := (LMeshCenterPos - LModelCenter);
+        LDir := (LModelCenter - LMeshCenterPos) + Point3D(0, -EXPLOSIVE_STRENGTH, 0);
         LDir := LDir.Normalize();
 
         LAnim := TPoint3DAnimation.Create(AMesh);
@@ -262,8 +256,8 @@ begin
   GorillaViewport1.Repaint;
 end;
 
-class procedure TForm1.HandleFileDragOver(const AFileFilter : String;
-  const Data: TDragObject; const Point: TPointF; var Operation: TDragOperation);
+procedure TForm1.DragOver(const Data: TDragObject;
+  const Point: TPointF; var Operation: TDragOperation);
 var
   Masks, M: string;
   HasFiles: Boolean;
@@ -276,7 +270,7 @@ begin
   // determine if the user is dragging one or more files and
   // if there is any filter set
   HasFiles := Length(Data.Files) > 0;
-  Masks := AFileFilter;
+  Masks := CurrentFilter;
   HasFilter := Masks <> '';
 
   // the Accept value is overriden by the filter only if there is at least one file
@@ -305,8 +299,8 @@ begin
   end;
 end;
 
-class procedure TForm1.HandleFileDragDrop(const Data: TDragObject;
-  const Point: TPointF; const ACallback : TFileDropFunc);
+procedure TForm1.DragDrop(const Data: TDragObject;
+  const Point: TPointF);
 var I : Integer;
     LFileName : String;
 begin
@@ -315,13 +309,9 @@ begin
   for I := 0 to High(Data.Files) do
   begin
     try
+      // Load the specific file
       LFileName := Data.Files[I];
-
-      if Assigned(ACallback) then
-      begin
-        if not ACallback(LFileName) then
-          Continue;
-      end;
+      LoadModel(LFileName);
     except
       on E: Exception do
       begin
@@ -331,27 +321,6 @@ begin
       end;
     end;
   end;
-end;
-
-procedure TForm1.DragOver(const Data: TDragObject;
-  const Point: TPointF; var Operation: TDragOperation);
-begin
-  inherited;
-
-  HandleFileDragOver(CurrentFilter, Data, Point, Operation);
-end;
-
-procedure TForm1.DragDrop(const Data: TDragObject;
-  const Point: TPointF);
-begin
-  inherited;
-
-  HandleFileDragDrop(Data, Point,
-    function(const AFileName : String) : Boolean
-    begin
-      LoadModel(AFileName);
-      Result := true;
-    end);
 end;
 
 procedure TForm1.Button1Click(Sender: TObject);
@@ -424,6 +393,9 @@ var LTotalBox : TBoundingBox;
     LMaxE  : Single;
     LCamOfs : Single;
 begin
+  GorillaViewport1.GetDesignCameraController().SetPositionAndAngle(TPoint3D.Zero,
+    TPoint3D.Zero);
+
   // Get the absolute size of our models
   LTotalBox := GorillaModel1.GetAbsoluteBoundingBox();
 
