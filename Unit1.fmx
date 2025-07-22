@@ -28,6 +28,7 @@ object Form1: TForm1
     TranslucentSaturation = 1.500000000000000000
     EmissiveBlur = 0
     GlobalIllumDetail = 0
+    GlobalIllumSoftness = 1.000000000000000000
     ShadowStrength = 0.400000005960464500
     FXAA = 0
     SSS_Enabled = False
@@ -38679,14 +38680,14 @@ object Form1: TForm1
     object RoundRect1: TRoundRect
       Anchors = [akLeft, akBottom]
       Position.X = 8.000000000000000000
-      Position.Y = 632.000000000000000000
+      Position.Y = 612.000000000000000000
       Size.Width = 400.000000000000000000
-      Size.Height = 80.000000000000000000
+      Size.Height = 100.000000000000000000
       Size.PlatformDefault = False
       object Button1: TButton
         Anchors = [akLeft, akBottom]
-        Position.X = 16.000000000000000000
-        Position.Y = 8.000000000000000000
+        Position.X = 23.000000000000000000
+        Position.Y = 12.000000000000000000
         Size.Width = 64.000000000000000000
         Size.Height = 64.000000000000000000
         Size.PlatformDefault = False
@@ -38698,8 +38699,8 @@ object Form1: TForm1
       end
       object Button2: TButton
         Anchors = [akLeft, akBottom]
-        Position.X = 88.000000000000000000
-        Position.Y = 8.000000000000000000
+        Position.X = 95.000000000000000000
+        Position.Y = 12.000000000000000000
         Size.Width = 64.000000000000000000
         Size.Height = 64.000000000000000000
         Size.PlatformDefault = False
@@ -38711,8 +38712,8 @@ object Form1: TForm1
       end
       object Button3: TButton
         Anchors = [akLeft, akBottom]
-        Position.X = 160.000000000000000000
-        Position.Y = 8.000000000000000000
+        Position.X = 167.000000000000000000
+        Position.Y = 12.000000000000000000
         Size.Width = 64.000000000000000000
         Size.Height = 64.000000000000000000
         Size.PlatformDefault = False
@@ -38724,14 +38725,28 @@ object Form1: TForm1
       end
       object CheckBox1: TCheckBox
         Anchors = [akLeft, akBottom]
-        Position.X = 232.000000000000000000
-        Position.Y = 29.000000000000000000
+        Position.X = 239.000000000000000000
+        Position.Y = 33.000000000000000000
         Size.Width = 145.000000000000000000
         Size.Height = 19.000000000000000000
         Size.PlatformDefault = False
         TabOrder = 5
         Text = 'Environment-Mapping'
         OnChange = CheckBox1Change
+      end
+      object TrackBar1: TTrackBar
+        CanParentFocus = True
+        Max = 10.000000000000000000
+        Min = 0.100000000000000000
+        Orientation = Horizontal
+        Position.X = 40.000000000000000000
+        Position.Y = 73.000000000000000000
+        Size.Width = 321.000000000000000000
+        Size.Height = 19.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 6
+        Value = 1.000000000000000000
+        OnChange = TrackBar1Change
       end
     end
     object CalloutRectangle1: TCalloutRectangle

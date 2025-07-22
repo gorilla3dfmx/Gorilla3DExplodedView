@@ -35,11 +35,13 @@ type
     Label3: TLabel;
     Label4: TLabel;
     Label5: TLabel;
+    TrackBar1: TTrackBar;
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
     procedure CheckBox1Change(Sender: TObject);
+    procedure TrackBar1Change(Sender: TObject);
   private
     FActiveMesh : TGorillaMesh;
     FAnimators : TList<TPoint3DAnimation>;
@@ -53,6 +55,8 @@ type
     procedure DragDrop(const Data: TDragObject;
       const Point: TPointF); override;
 
+    procedure RecreateAnimators(AMesh : TGorillaMesh);
+    procedure SetupAnimators(AMesh : TGorillaMesh; AStrength : Single);
     procedure LoadModel(const AFileName : String);
     procedure Play();
     procedure Reverse();
@@ -77,7 +81,7 @@ implementation
 uses
   System.Masks, System.RTLConsts, FMX.Utils,
   ExplosiveView.Utils,
-  Gorilla.Utils.Dialogs,
+  Gorilla.Utils.Dialogs, Gorilla.Utils.Math,
   Gorilla.DefTypes,
   Gorilla.DAE.Loader,
   Gorilla.FBX.Loader,
@@ -121,62 +125,84 @@ begin
   end;
 end;
 
-procedure TForm1.LoadModel(const AFileName : String);
-const
-  EXPLOSIVE_DURATION = 1;
-  EXPLOSIVE_STRENGTH = 5;
+procedure TForm1.RecreateAnimators(AMesh : TGorillaMesh);
+var I : Integer;
+begin
+  // Reset mesh positions
+  Reset();
 
-  procedure SetupAnimators(AMesh : TGorillaMesh);
-  var LAnim : TPoint3DAnimation;
-      LModelCenter, LDir,
-      LMeshCenterPos : TPoint3D;
-      I : Integer;
-      LLen : Single;
-      LDef : TMeshDef;
-      LBBox : TBoundingBox;
-      LStrength : TPoint3D;
+  // Recreate animators
+  if Assigned(FAnimators) then
   begin
-    // Only set up an animator if there are triangles to be moved
-    if Assigned(AMesh.Def) then
+    for I := 0 to FAnimators.Count - 1 do
     begin
-      LDef := AMesh.Def as TMeshDef;
-      if Assigned(LDef.IndexSource) and (LDef.IndexSource.Length > 0) then
-      begin
-        // Assign mouse callbacks
-        AMesh.HitTest := true;
-        AMesh.OnClick := MeshClick;
-        AMesh.OnMouseEnter := MeshMouseEnter;
-        AMesh.OnMouseLeave := MeshMouseLeave;
-
-        // Calculate distance to model center to get the direction
-        LModelCenter := TPoint3D.Zero;
-
-        LBBox := AMesh.GetAbsoluteBoundingBox();
-        LMeshCenterPos := LBBox.CenterPoint;
-        LLen := LMeshCenterPos.Distance(LModelCenter);
-        LDir := (LModelCenter - LMeshCenterPos);
-        LDir := LDir.Normalize();
-
-        LAnim := TPoint3DAnimation.Create(AMesh);
-        LAnim.Parent := AMesh;
-        LAnim.PropertyName := 'Position.Point';
-        LAnim.Duration := EXPLOSIVE_DURATION;
-        LAnim.StartValue.Point := AMesh.Position.Point;
-
-        LStrength := LBBox.GetSize().Normalize() * EXPLOSIVE_STRENGTH;
-        LAnim.StopValue.Point := LAnim.StartValue.Point + (LDir * LStrength);
-
-        FAnimators.Add(LAnim);
-      end;
+      FAnimators[I].Parent := nil;
+      FAnimators[I].Free();
     end;
 
-    if not Assigned(AMesh.Meshes) then
-      Exit;
-
-    for I := 0 to AMesh.Meshes.Count - 1 do
-      SetupAnimators(AMesh.Meshes.Items[I]);
+    FAnimators.Clear();
   end;
 
+  SetupAnimators(AMesh, TrackBar1.Value);
+end;
+
+procedure TForm1.SetupAnimators(AMesh : TGorillaMesh; AStrength : Single);
+const
+  EXPLOSIVE_DURATION = 1;
+
+var LAnim : TPoint3DAnimation;
+    LParentCenter, LDir,
+    LMeshCenterPos : TPoint3D;
+    I : Integer;
+    LLen : Single;
+    LDef : TMeshDef;
+    LBBox : TBoundingBox;
+    LStrength : TPoint3D;
+begin
+  // Only set up an animator if there are triangles to be moved
+  if Assigned(AMesh.Def) then
+  begin
+    LDef := AMesh.Def as TMeshDef;
+    if Assigned(LDef.IndexSource) and (LDef.IndexSource.Length > 0) then
+    begin
+      // Assign mouse callbacks
+      AMesh.HitTest := true;
+      AMesh.OnClick := MeshClick;
+      AMesh.OnMouseEnter := MeshMouseEnter;
+      AMesh.OnMouseLeave := MeshMouseLeave;
+
+      // Calculate distance to model center to get the direction
+      LParentCenter := TPoint3D.Zero;
+//        if Assigned(AMesh.Parent) and (AMesh.Parent is TGorillaMesh) then
+//          LParentCenter := TGorillaMesh(AMesh.Parent).GetAbsoluteBoundingBox().CenterPoint;
+
+      LBBox := AMesh.GetAbsoluteBoundingBox();
+      LMeshCenterPos := LBBox.CenterPoint;
+      LLen := LMeshCenterPos.Distance(LParentCenter);
+      LDir := (LParentCenter - LMeshCenterPos);
+      LDir := LDir.Normalize();
+
+      LAnim := TPoint3DAnimation.Create(AMesh);
+      LAnim.Parent := AMesh;
+      LAnim.PropertyName := 'Position.Point';
+      LAnim.Duration := EXPLOSIVE_DURATION;
+      LAnim.StartValue.Point := AMesh.Position.Point;
+
+      LStrength := Point3D(-LLen*AStrength, LLen*AStrength, LLen*AStrength);
+      LAnim.StopValue.Point := LAnim.StartValue.Point + (LDir * LStrength);
+
+      FAnimators.Add(LAnim);
+    end;
+  end;
+
+  if not Assigned(AMesh.Meshes) then
+    Exit;
+
+  for I := 0 to AMesh.Meshes.Count - 1 do
+    SetupAnimators(AMesh.Meshes.Items[I], AStrength);
+end;
+
+procedure TForm1.LoadModel(const AFileName : String);
 var LBBox : TBoundingBox;
     LSize : TPoint3D;
     LMaxScale : Single;
@@ -213,7 +239,7 @@ begin
   AdjustCamera();
 
   FAnimators := TList<TPoint3DAnimation>.Create();
-  SetupAnimators(GorillaModel1);
+  SetupAnimators(GorillaModel1, TrackBar1.Value / LMaxScale);
 end;
 
 procedure TForm1.Play();
@@ -391,6 +417,11 @@ begin
       Zoom(-LCamOfs);
     end;
   end;
+end;
+
+procedure TForm1.TrackBar1Change(Sender: TObject);
+begin
+  RecreateAnimators(GorillaModel1);
 end;
 
 procedure TForm1.ShowMeshInfo(AMesh : TGorillaMesh);
