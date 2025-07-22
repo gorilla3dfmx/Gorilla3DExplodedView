@@ -6,34 +6,35 @@ uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
   System.Math.Vectors, System.Generics.Collections, System.Math,
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, FMX.Types3D,
-  FMX.MaterialSources,
+  FMX.MaterialSources, FMX.StdCtrls, FMX.Controls.Presentation,
   Gorilla.Mesh, Gorilla.Control, Gorilla.Animation,
   Gorilla.Transform, Gorilla.Model, Gorilla.Controller,
   Gorilla.Controller.Passes.Environment, FMX.Controls3D, Gorilla.Light,
   Gorilla.Viewport, Gorilla.Sphere, Gorilla.Material.Default,
-  Gorilla.Material.Custom, Gorilla.Material.Lambert, FMX.Controls.Presentation,
-  FMX.StdCtrls, Gorilla.Disk;
+  Gorilla.Material.Custom, Gorilla.Material.Lambert, FMX.Objects;
 
 type
-  TFileDropFunc = reference to function(const AFilename : String) : Boolean;
-
   TForm1 = class(TForm)
     GorillaViewport1: TGorillaViewport;
     GorillaLight1: TGorillaLight;
     GorillaRenderPassEnvironment1: TGorillaRenderPassEnvironment;
     GorillaModel1: TGorillaModel;
-    GorillaLambertMaterialSource1: TGorillaLambertMaterialSource;
-    GorillaSphere1: TGorillaSphere;
-    GorillaLight2: TGorillaLight;
-    GorillaLight3: TGorillaLight;
     Button1: TButton;
     Button2: TButton;
     Button3: TButton;
+    CheckBox1: TCheckBox;
+    VRRoom: TGorillaModel;
+    GorillaLight2: TGorillaLight;
+    GorillaLight3: TGorillaLight;
     GorillaLight4: TGorillaLight;
     GorillaLight5: TGorillaLight;
-    CheckBox1: TCheckBox;
-    GorillaDisk1: TGorillaDisk;
-    GorillaLambertMaterialSource2: TGorillaLambertMaterialSource;
+    RoundRect1: TRoundRect;
+    CalloutRectangle1: TCalloutRectangle;
+    Label1: TLabel;
+    Label2: TLabel;
+    Label3: TLabel;
+    Label4: TLabel;
+    Label5: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
@@ -57,6 +58,8 @@ type
     procedure Reverse();
     procedure Reset();
     procedure AdjustCamera();
+    procedure ShowMeshInfo(AMesh : TGorillaMesh);
+    procedure HideMeshInfo();
   end;
 
 const
@@ -73,6 +76,7 @@ implementation
 
 uses
   System.Masks, System.RTLConsts, FMX.Utils,
+  ExplosiveView.Utils,
   Gorilla.Utils.Dialogs,
   Gorilla.DefTypes,
   Gorilla.DAE.Loader,
@@ -120,7 +124,7 @@ end;
 procedure TForm1.LoadModel(const AFileName : String);
 const
   EXPLOSIVE_DURATION = 1;
-  EXPLOSIVE_STRENGTH = 2;
+  EXPLOSIVE_STRENGTH = 5;
 
   procedure SetupAnimators(AMesh : TGorillaMesh);
   var LAnim : TPoint3DAnimation;
@@ -147,10 +151,10 @@ const
         // Calculate distance to model center to get the direction
         LModelCenter := TPoint3D.Zero;
 
-        LBBox := AMesh.GetVertexDataBoundingBox(AMesh.AbsoluteMatrix, true);
+        LBBox := AMesh.GetAbsoluteBoundingBox();
         LMeshCenterPos := LBBox.CenterPoint;
         LLen := LMeshCenterPos.Distance(LModelCenter);
-        LDir := (LModelCenter - LMeshCenterPos) + Point3D(0, -EXPLOSIVE_STRENGTH, 0);
+        LDir := (LModelCenter - LMeshCenterPos);
         LDir := LDir.Normalize();
 
         LAnim := TPoint3DAnimation.Create(AMesh);
@@ -159,8 +163,7 @@ const
         LAnim.Duration := EXPLOSIVE_DURATION;
         LAnim.StartValue.Point := AMesh.Position.Point;
 
-        LStrength := LBBox.GetSize() * EXPLOSIVE_STRENGTH;
-
+        LStrength := LBBox.GetSize().Normalize() * EXPLOSIVE_STRENGTH;
         LAnim.StopValue.Point := LAnim.StartValue.Point + (LDir * LStrength);
 
         FAnimators.Add(LAnim);
@@ -181,19 +184,22 @@ begin
   // Reset model, animators and environment render pass
   FreeAndNil(FAnimators);
   GorillaModel1.Clear();
+  GorillaModel1.Position.Point := TPoint3D.Zero;
+  GorillaModel1.Scale.Point := TPoint3D.Create(1, 1, 1);
   GorillaRenderPassEnvironment1.IgnoredControls.Clear();
   GorillaRenderPassEnvironment1.AllowedControls.Clear();
+  CheckBox1.IsChecked := false;
 
   // Load model
   GorillaModel1.LoadFromFile(nil, AFilename, []);
 
   // Adjust the size to fit in a cube of size 50
-  LBBox := GorillaModel1.GetVertexDataBoundingBox(TMatrix3D.Identity, false);
+  LBBox := GorillaModel1.GetAbsoluteBoundingBox();
   LSize := LBBox.GetSize();
-  LSize.X := 10 / LSize.X;
-  LSize.Y := 10 / LSize.Y;
-  LSize.Z := 10 / LSize.Z;
-  LMaxScale := System.Math.Max(LSize.X, System.Math.Max(LSize.Y, LSize.Z));
+  LSize.X := 25 / LSize.X;
+  LSize.Y := 25 / LSize.Y;
+  LSize.Z := 25 / LSize.Z;
+  LMaxScale := System.Math.Min(LSize.X, System.Math.Min(LSize.Y, LSize.Z));
   GorillaModel1.Scale.X := LMaxScale;
   GorillaModel1.Scale.Y := LMaxScale;
   GorillaModel1.Scale.Z := LMaxScale;
@@ -258,69 +264,24 @@ end;
 
 procedure TForm1.DragOver(const Data: TDragObject;
   const Point: TPointF; var Operation: TDragOperation);
-var
-  Masks, M: string;
-  HasFiles: Boolean;
-  HasFilter: Boolean;
-  HasMatchedFile: Boolean;
-  I: Integer;
 begin
   inherited;
 
-  // determine if the user is dragging one or more files and
-  // if there is any filter set
-  HasFiles := Length(Data.Files) > 0;
-  Masks := CurrentFilter;
-  HasFilter := Masks <> '';
-
-  // the Accept value is overriden by the filter only if there is at least one file
-  // in the Data drag object; when a filter exists, there must be at least
-  // one file that matches the filter in order for Accept to have set by the user;
-  // if there is no file matching the filter, Accept is false
-  if HasFiles and HasFilter then
-  begin
-    HasMatchedFile := False;
-    M := GetToken(Masks, ';');
-    while (M <> '') and (not HasMatchedFile) do
-    begin
-      for I := 0 to High(Data.Files) do
-      begin
-        HasMatchedFile := MatchesMask(Data.Files[I], M);
-
-        // there is at least one file matching the filter
-        if HasMatchedFile then
-          Break;
-      end;
-      M := GetToken(Masks, ';');
-    end;
-
-    if HasMatchedFile then
-      Operation := TDragOperation.Move;
-  end;
+  TExplosiveViewUtils.HandleFileDragOver(CurrentFilter, Data, Point,
+    Operation);
 end;
 
 procedure TForm1.DragDrop(const Data: TDragObject;
   const Point: TPointF);
-var I : Integer;
-    LFileName : String;
 begin
   inherited;
 
-  for I := 0 to High(Data.Files) do
-  begin
-    try
-      // Load the specific file
-      LFileName := Data.Files[I];
-      LoadModel(LFileName);
-    except
-      on E: Exception do
-      begin
-        raise Exception.CreateFmt(
-          'Failed to load 3D model file: %s'#13#10'ERROR: %s',
-          [LFileName, E.Message]);
-      end;
-    end;
-  end;
+  TExplosiveViewUtils.HandleFileDragDrop(Data, Point,
+    function(const AFileName : String) : Boolean
+    begin
+      LoadModel(AFileName);
+      Result := true;
+    end);
 end;
 
 procedure TForm1.Button1Click(Sender: TObject);
@@ -377,6 +338,7 @@ var LMesh : TGorillaMesh;
 begin
   LMesh := Sender as TGorillaMesh;
   LMesh.Wireframe := true;
+  ShowMeshInfo(LMesh);
 end;
 
 procedure TForm1.MeshMouseLeave(Sender: TObject);
@@ -384,6 +346,7 @@ var LMesh : TGorillaMesh;
 begin
   LMesh := Sender as TGorillaMesh;
   LMesh.Wireframe := false;
+  HideMeshInfo();
 end;
 
 procedure TForm1.AdjustCamera();
@@ -412,16 +375,43 @@ begin
   begin
     // Wider than taller
     LCamOfs := LMaxE * (2 * ArcTan(LTanHalfAngleOfView) * LAspect);
-    GorillaViewport1.GetDesignCameraController().SetPositionAndAngle(
-      LTotalBox.CenterPoint + Point3D(0, 0, -LCamOfs), TPoint3D.Zero);
+    with GorillaViewport1.GetDesignCameraController() do
+    begin
+      SetPositionAndAngle(LTotalBox.CenterPoint, TPoint3D.Zero);
+      Zoom(-LCamOfs);
+    end;
   end
   else
   begin
     // Taller than wider
     LCamOfs := LMaxE / (2 * LTanHalfAngleOfView * LAspect);
-    GorillaViewport1.GetDesignCameraController().SetPositionAndAngle(
-      LTotalBox.CenterPoint + Point3D(0, 0, -LCamOfs), TPoint3D.Zero);
+    with GorillaViewport1.GetDesignCameraController() do
+    begin
+      SetPositionAndAngle(LTotalBox.CenterPoint, TPoint3D.Zero);
+      Zoom(-LCamOfs);
+    end;
   end;
+end;
+
+procedure TForm1.ShowMeshInfo(AMesh : TGorillaMesh);
+begin
+  if not Assigned(AMesh) then
+  begin
+    HideMeshInfo();
+    Exit;
+  end;
+
+  CalloutRectangle1.Visible := true;
+  Label1.Text := Format('ID: %s', [AMesh.QualifiedName]);
+  Label2.Text := Format('Vertices: %d', [TMeshDef(AMesh.Def).VertexSource.Length]);
+  Label3.Text := Format('Triangles: %d', [TMeshDef(AMesh.Def).IndexSource.Length div 3]);
+  Label4.Text := Format('Volume: %n', [TExplosiveViewUtils.GetVolumeOfMesh(AMesh, TMatrix3D.Identity, 1)]);
+  Label5.Text := Format('Surface: %n', [TExplosiveViewUtils.GetSurfaceSizeOfMesh(AMesh, TMatrix3D.Identity, 1)]);
+end;
+
+procedure TForm1.HideMeshInfo();
+begin
+  CalloutRectangle1.Visible := false;
 end;
 
 end.
