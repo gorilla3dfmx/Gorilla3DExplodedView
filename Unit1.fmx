@@ -28,8 +28,7 @@ object Form1: TForm1
     TranslucentSaturation = 1.500000000000000000
     EmissiveBlur = 0
     GlobalIllumDetail = 0
-    GlobalIllumSoftness = 1.000000000000000000
-    ShadowStrength = 0.400000005960464500
+    ShadowStrength = 0.800000011920929000
     FXAA = 0
     SSS_Enabled = False
     SSS_NumSamples = 128
@@ -38697,40 +38696,14 @@ object Form1: TForm1
         TextSettings.Trimming = None
         OnClick = Button1Click
       end
-      object Button2: TButton
-        Anchors = [akLeft, akBottom]
-        Position.X = 95.000000000000000000
-        Position.Y = 12.000000000000000000
-        Size.Width = 64.000000000000000000
-        Size.Height = 64.000000000000000000
-        Size.PlatformDefault = False
-        StyleLookup = 'rewindtoolbutton'
-        TabOrder = 3
-        Text = 'Button2'
-        TextSettings.Trimming = None
-        OnClick = Button2Click
-      end
-      object Button3: TButton
-        Anchors = [akLeft, akBottom]
-        Position.X = 167.000000000000000000
-        Position.Y = 12.000000000000000000
-        Size.Width = 64.000000000000000000
-        Size.Height = 64.000000000000000000
-        Size.PlatformDefault = False
-        StyleLookup = 'stoptoolbutton'
-        TabOrder = 4
-        Text = 'Button3'
-        TextSettings.Trimming = None
-        OnClick = Button3Click
-      end
       object CheckBox1: TCheckBox
         Anchors = [akLeft, akBottom]
-        Position.X = 239.000000000000000000
+        Position.X = 111.000000000000000000
         Position.Y = 33.000000000000000000
         Size.Width = 145.000000000000000000
         Size.Height = 19.000000000000000000
         Size.PlatformDefault = False
-        TabOrder = 5
+        TabOrder = 3
         Text = 'Environment-Mapping'
         OnChange = CheckBox1Change
       end
@@ -38744,7 +38717,7 @@ object Form1: TForm1
         Size.Width = 321.000000000000000000
         Size.Height = 19.000000000000000000
         Size.PlatformDefault = False
-        TabOrder = 6
+        TabOrder = 4
         Value = 1.000000000000000000
         OnChange = TrackBar1Change
       end
