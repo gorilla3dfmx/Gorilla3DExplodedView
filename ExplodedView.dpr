@@ -1,4 +1,4 @@
-program ExplosiveView;
+program ExplodedView;
 
 uses
   System.StartUpCopy,

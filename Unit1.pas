@@ -99,7 +99,7 @@ implementation
 
 uses
   System.Masks, System.RTLConsts, FMX.Utils,
-  ExplosiveView.Utils,
+  ExplodedView.Utils,
   Gorilla.Utils.Dialogs, Gorilla.Utils.Math,
   Gorilla.DefTypes,
   Gorilla.DAE.Loader,
@@ -159,7 +159,7 @@ begin
   inherited;
 
   // Check if the file extension is allowed by Gorilla3D to be loaded
-  TExplosiveViewUtils.HandleFileDragOver(CurrentFilter, Data, Point,
+  TExplodedViewUtils.HandleFileDragOver(CurrentFilter, Data, Point,
     Operation);
 end;
 
@@ -169,7 +169,7 @@ begin
   inherited;
 
   // Start loading the dragged model file (only single files are supported)
-  TExplosiveViewUtils.HandleFileDragDrop(Data, Point,
+  TExplodedViewUtils.HandleFileDragDrop(Data, Point,
     function(const AFileName : String) : Boolean
     begin
       // This will replace the GorillaModel1 instance and load the model into this
@@ -239,8 +239,8 @@ begin
   Label1.Text := Format('ID: %s', [AMesh.QualifiedName]);
   Label2.Text := Format('Vertices: %d', [TMeshDef(AMesh.Def).VertexSource.Length]);
   Label3.Text := Format('Triangles: %d', [TMeshDef(AMesh.Def).IndexSource.Length div 3]);
-  Label4.Text := Format('Volume: %n', [TExplosiveViewUtils.GetVolumeOfMesh(AMesh, TMatrix3D.Identity, 1)]);
-  Label5.Text := Format('Surface: %n', [TExplosiveViewUtils.GetSurfaceSizeOfMesh(AMesh, TMatrix3D.Identity, 1)]);
+  Label4.Text := Format('Volume: %n', [TExplodedViewUtils.GetVolumeOfMesh(AMesh, TMatrix3D.Identity, 1)]);
+  Label5.Text := Format('Surface: %n', [TExplodedViewUtils.GetSurfaceSizeOfMesh(AMesh, TMatrix3D.Identity, 1)]);
 end;
 
 procedure TForm1.HideMeshInfo();
@@ -323,7 +323,7 @@ end;
 
 procedure TForm1.SetupAnimators(AMesh : TGorillaMesh; AStrength : Single);
 const
-  EXPLOSIVE_DURATION = 1;
+  EXPLODED_DURATION = 1;
 
 var LAnim : TPoint3DAnimation;
     LSceneCenter, LDir,
@@ -364,7 +364,7 @@ begin
       LAnim := TPoint3DAnimation.Create(AMesh);
       LAnim.Parent := AMesh;
       LAnim.PropertyName := 'Position.Point';
-      LAnim.Duration := EXPLOSIVE_DURATION;
+      LAnim.Duration := EXPLODED_DURATION;
 
       // Starting point is the original mesh positions
       LAnim.StartValue.Point := AMesh.Position.Point;

@@ -1,4 +1,4 @@
-unit ExplosiveView.Utils;
+unit ExplodedView.Utils;
 
 interface
 
@@ -10,7 +10,7 @@ uses
 type
   TFileDropFunc = reference to function(const AFilename : String) : Boolean;
 
-  TExplosiveViewUtils = record
+  TExplodedViewUtils = record
     public
       class function GetVolumeOfMesh(const AVBuf : TVertexBuffer;
         const AIBuf : TIndexBuffer; const AScale : TMatrix3D;
@@ -49,7 +49,7 @@ begin
   Result := ((1 / 6) * (-v321 + v231 + v312 - v132 - v213 + v123)) / ASceneScale; // DEFAULT_SCENE_SCALE;
 end;
 
-class function TExplosiveViewUtils.GetVolumeOfMesh(const AVBuf : TVertexBuffer;
+class function TExplodedViewUtils.GetVolumeOfMesh(const AVBuf : TVertexBuffer;
   const AIBuf : TIndexBuffer; const AScale : TMatrix3D; const ASceneScale : Single) : Single;
 var T : Integer;
     P1, P2, P3 : TPoint3D;
@@ -79,7 +79,7 @@ begin
   Result := Abs(Result);
 end;
 
-class function TExplosiveViewUtils.GetVolumeOfMesh(const AMesh : TGorillaMesh;
+class function TExplodedViewUtils.GetVolumeOfMesh(const AMesh : TGorillaMesh;
   const AScale : TMatrix3D; const ASceneScale : Single) : Single;
 var I : Integer;
     LDef : TMeshDef;
@@ -95,26 +95,26 @@ begin
   if AMesh.IsStatic then
   begin
     LDef := (AMesh.Def as TMeshDef);
-    Result := TExplosiveViewUtils.GetVolumeOfMesh(LDef.VertexSource, LDef.IndexSource,
+    Result := TExplodedViewUtils.GetVolumeOfMesh(LDef.VertexSource, LDef.IndexSource,
       LScale, ASceneScale);
   end
   else
   begin
     LData := AMesh.MeshData;
     if Assigned(LData) then
-      Result := TExplosiveViewUtils.GetVolumeOfMesh(LData.VertexBuffer, LData.IndexBuffer,
+      Result := TExplodedViewUtils.GetVolumeOfMesh(LData.VertexBuffer, LData.IndexBuffer,
         LScale, ASceneScale);
   end;
 
   if Assigned(AMesh.Meshes) then
   begin
     for I := 0 to AMesh.Meshes.Count - 1 do
-      Result := Result + TExplosiveViewUtils.GetVolumeOfMesh(AMesh.Meshes[I],
+      Result := Result + TExplodedViewUtils.GetVolumeOfMesh(AMesh.Meshes[I],
         LScale, ASceneScale);
   end;
 end;
 
-class function TExplosiveViewUtils.GetSurfaceSizeOfMesh(
+class function TExplodedViewUtils.GetSurfaceSizeOfMesh(
   const AMesh: TGorillaMesh; const AScale: TMatrix3D;
   const ASceneScale : Single): Single;
 var I : Integer;
@@ -131,26 +131,26 @@ begin
   if AMesh.IsStatic then
   begin
     LDef := (AMesh.Def as TMeshDef);
-    Result := TExplosiveViewUtils.GetSurfaceSizeOfMesh(LDef.VertexSource, LDef.IndexSource,
+    Result := TExplodedViewUtils.GetSurfaceSizeOfMesh(LDef.VertexSource, LDef.IndexSource,
       LScale, ASceneScale);
   end
   else
   begin
     LData := AMesh.MeshData;
     if Assigned(LData) then
-      Result := TExplosiveViewUtils.GetSurfaceSizeOfMesh(LData.VertexBuffer, LData.IndexBuffer,
+      Result := TExplodedViewUtils.GetSurfaceSizeOfMesh(LData.VertexBuffer, LData.IndexBuffer,
         LScale, ASceneScale);
   end;
 
   if Assigned(AMesh.Meshes) then
   begin
     for I := 0 to AMesh.Meshes.Count - 1 do
-      Result := Result + TExplosiveViewUtils.GetSurfaceSizeOfMesh(AMesh.Meshes[I],
+      Result := Result + TExplodedViewUtils.GetSurfaceSizeOfMesh(AMesh.Meshes[I],
         LScale, ASceneScale);
   end;
 end;
 
-class function TExplosiveViewUtils.GetSurfaceSizeOfMesh(
+class function TExplodedViewUtils.GetSurfaceSizeOfMesh(
   const AVBuf: TVertexBuffer; const AIBuf: TIndexBuffer;
   const AScale: TMatrix3D; const ASceneScale : Single): Single;
 
@@ -192,7 +192,7 @@ begin
   Result := Abs(Result);
 end;
 
-class procedure TExplosiveViewUtils.HandleFileDragOver(const AFileFilter : String;
+class procedure TExplodedViewUtils.HandleFileDragOver(const AFileFilter : String;
   const Data: TDragObject; const Point: TPointF; var Operation: TDragOperation);
 var
   Masks, M: string;
@@ -235,7 +235,7 @@ begin
   end;
 end;
 
-class procedure TExplosiveViewUtils.HandleFileDragDrop(const Data: TDragObject;
+class procedure TExplodedViewUtils.HandleFileDragDrop(const Data: TDragObject;
   const Point: TPointF; const ACallback : TFileDropFunc);
 var I : Integer;
     LFileName : String;
