@@ -46,9 +46,11 @@ type
 
   private
     FAnimators : TList<TPoint3DAnimation>;
+    FAnimatorsOriginalPosition,
     FAnimatorsOriginalExplosion : TList<TPoint3D>;
     FLastPoint : TPointF;
     FInStartingPos : Boolean;
+    FExpansionChanging : Integer;
 
     { Mouse interaction }
 
@@ -99,7 +101,7 @@ implementation
 
 uses
   System.Masks, System.RTLConsts, FMX.Utils,
-  ExplodedView.Utils,
+  ExplodedView.Utils, Gorilla.Camera,
   Gorilla.Utils.Dialogs, Gorilla.Utils.Math,
   Gorilla.DefTypes,
   Gorilla.DAE.Loader,
@@ -141,9 +143,13 @@ begin
   GorillaLight1.Parent := GorillaViewport1.GetDesignCamera();
   GorillaLight1.Position.Point := TPoint3D.Zero;
 
-  // Increase navigation speed
+  // Configure camera navigation with our default smooth controller
   with GorillaViewport1.GetDesignCameraController() do
   begin
+    // Activate orbiting camera navigation (available since v1.1.9)
+    NavigationProfile := TGorillaCameraNavigationProfile.cnpOrbit;
+
+    // Increase navigation speed
     Interval := 10;
     ShiftIntensity := 5;
     IntensityRotate := 25;
@@ -187,14 +193,18 @@ var LBBox : TBoundingBox;
 begin
   // Reset model, animators and environment render pass
   FreeAndNil(FAnimators);
+  FreeAndNil(FAnimatorsOriginalPosition);
   FreeAndNil(FAnimatorsOriginalExplosion);
 
   GorillaModel1.Clear();
   GorillaModel1.Position.Point := TPoint3D.Zero;
   GorillaModel1.Scale.Point := TPoint3D.Create(1, 1, 1);
+  GorillaModel1.ResetRotationAngle();
   GorillaRenderPassEnvironment1.IgnoredControls.Clear();
   GorillaRenderPassEnvironment1.AllowedControls.Clear();
   CheckBox1.IsChecked := false;
+
+  FInStartingPos := true;
 
   // Load model
   var LOpts := TGorillaLoadOptions.Create(AFilename, [], nil, nil);
@@ -222,8 +232,9 @@ begin
 
   // Create the lists for our explosion animators
   FAnimators := TList<TPoint3DAnimation>.Create();
+  FAnimatorsOriginalPosition := TList<TPoint3D>.Create();
   FAnimatorsOriginalExplosion := TList<TPoint3D>.Create();
-  SetupAnimators(GorillaModel1, TrackBar1.Value / LMaxScale);
+  SetupAnimators(GorillaModel1, TrackBar1.Value);
 end;
 
 procedure TForm1.ShowMeshInfo(AMesh : TGorillaMesh);
@@ -236,7 +247,7 @@ begin
 
   // Show the rectangle with current mesh information
   CalloutRectangle1.Visible := true;
-  Label1.Text := Format('ID: %s', [AMesh.QualifiedName]);
+  Label1.Text := Format('ID: %s', [Copy(AMesh.QualifiedName, 1, 32)]);
   Label2.Text := Format('Vertices: %d', [TMeshDef(AMesh.Def).VertexSource.Length]);
   Label3.Text := Format('Triangles: %d', [TMeshDef(AMesh.Def).IndexSource.Length div 3]);
   Label4.Text := Format('Volume: %n', [TExplodedViewUtils.GetVolumeOfMesh(AMesh, TMatrix3D.Identity, 1)]);
@@ -314,6 +325,7 @@ begin
     end;
 
     FAnimators.Clear();
+    FAnimatorsOriginalPosition.Clear();
     FAnimatorsOriginalExplosion.Clear();
   end;
 
@@ -332,6 +344,7 @@ var LAnim : TPoint3DAnimation;
     LLen : Single;
     LDef : TMeshDef;
     LBBox : TBoundingBox;
+    LStrVal : Single;
     LStrength : TPoint3D;
 begin
   // Only set up an animator if there are triangles to be moved
@@ -348,20 +361,24 @@ begin
       AMesh.OnMouseMove := MeshMouseMove;
       AMesh.OnMouseUp := MeshMouseUp;
 
+      AMesh.Hint := AMesh.QualifiedName;
+      AMesh.ShowHint := true;
+
       // Calculate distance to model center to get the direction ...
       LSceneCenter := TPoint3D.Zero;
 
       // The explosion direction is the center of the current mesh to the
       // center of the scene
-      LBBox := AMesh.GetAbsoluteBoundingBox();
+      LBBox := AMesh.GetBoundingBox();
       LMeshCenterPos := LBBox.CenterPoint;
       // To explode depending on the mesh size we need the distance to the center
       LLen := LMeshCenterPos.Distance(LSceneCenter);
-      LDir := (LSceneCenter - LMeshCenterPos);
+      LDir := -(LSceneCenter - LMeshCenterPos);
       LDir := LDir.Normalize();
 
       // Create the explosion animation
       LAnim := TPoint3DAnimation.Create(AMesh);
+      LAnim.Enabled := false;
       LAnim.Parent := AMesh;
       LAnim.PropertyName := 'Position.Point';
       LAnim.Duration := EXPLODED_DURATION;
@@ -371,16 +388,18 @@ begin
 
       // Calculate the strength of explosion by the distance and the current
       // trackbar value
-      LStrength := Point3D(-LLen * AStrength, LLen * AStrength, LLen * AStrength);
+      LStrVal := LLen * AStrength;
+      LStrength := Point3D(LStrVal, LStrVal, LStrVal);
       LAnim.StopValue.Point := LAnim.StartValue.Point + (LDir * LStrength);
 
       // Save the power of explosion
-      AMesh.TagFloat := LLen * AStrength;
+      AMesh.TagFloat := LStrVal;
 
       // Add the animator to the global animator list
       FAnimators.Add(LAnim);
 
       // Save the original stop value so we can restore after user dragging
+      FAnimatorsOriginalPosition.Add(AMesh.Position.Point);
       FAnimatorsOriginalExplosion.Add(LAnim.StopValue.Point);
     end;
   end;
@@ -459,7 +478,7 @@ begin
   begin
     FAnimators[I].Enabled := false;
     FAnimators[I].Inverse := false;
-    TGorillaMesh(FAnimators[I].Parent).Position.Point := FAnimators[I].StartValue.Point;
+    TGorillaMesh(FAnimators[I].Parent).Position.Point := FAnimatorsOriginalPosition[I];
     // Reset to original stop explosion position
     FAnimators[I].StopValue.Point := FAnimatorsOriginalExplosion[I];
   end;
@@ -511,7 +530,15 @@ end;
 
 procedure TForm1.TrackBar1Change(Sender: TObject);
 begin
-  RecreateAnimators(GorillaModel1);
+  if FExpansionChanging > 0 then
+    Exit;
+
+  AtomicIncrement(FExpansionChanging);
+  try
+    RecreateAnimators(GorillaModel1);
+  finally
+    AtomicDecrement(FExpansionChanging);
+  end;
 end;
 
 { Mouse interaction }
