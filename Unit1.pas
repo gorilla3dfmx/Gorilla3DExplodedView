@@ -43,6 +43,7 @@ type
     procedure Button1Click(Sender: TObject);
     procedure CheckBox1Change(Sender: TObject);
     procedure TrackBar1Change(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
 
   private
     FAnimator : TGorillaExplodedViewAnimator;
@@ -143,6 +144,11 @@ begin
 
   // Create the animator, which is responsible for the exploded view controlling
   FAnimator := TGorillaExplodedViewAnimator.Create(GorillaViewport1);
+end;
+
+procedure TForm1.FormDestroy(Sender: TObject);
+begin
+  FreeAndNil(FAnimator);
 end;
 
 { Form events }
