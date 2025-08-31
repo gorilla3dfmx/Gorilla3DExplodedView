@@ -5,18 +5,22 @@ interface
 uses
   System.Types, System.SysUtils, System.Math, System.Math.Vectors,
   FMX.Types, FMX.Types3D,
-  Gorilla.Mesh;
+  Gorilla.Mesh, Gorilla.Model, Gorilla.Viewport, Gorilla.Controller.Passes.Environment;
 
 type
   TFileDropFunc = reference to function(const AFilename : String) : Boolean;
 
   TExplodedViewUtils = record
     public
+      { Compute the volume of the provided mesh }
+
       class function GetVolumeOfMesh(const AVBuf : TVertexBuffer;
         const AIBuf : TIndexBuffer; const AScale : TMatrix3D;
         const ASceneScale : Single) : Single; overload; static;
       class function GetVolumeOfMesh(const AMesh : TGorillaMesh;
         const AScale : TMatrix3D; const ASceneScale : Single) : Single; overload; static;
+
+      { Compute the surface size of the provided mesh }
 
       class function GetSurfaceSizeOfMesh(const AVBuf : TVertexBuffer;
         const AIBuf : TIndexBuffer; const AScale : TMatrix3D;
@@ -24,17 +28,34 @@ type
       class function GetSurfaceSizeOfMesh(const AMesh : TGorillaMesh;
         const AScale : TMatrix3D; const ASceneScale : Single) : Single; overload; static;
 
+      { File drop of model files }
+
       class procedure HandleFileDragOver(const AFileFilter : String;
         const Data: TDragObject; const Point: TPointF; var Operation: TDragOperation); static;
       class procedure HandleFileDragDrop(const Data: TDragObject;
         const Point: TPointF; const ACallback : TFileDropFunc); static;
+
+      { Model and camera adjustment }
+
+      class procedure ResetModel(AModel : TGorillaModel); static;
+      class procedure AutoAdjustModelSize(AModel : TGorillaModel;
+        const AReferenceSize : Single); static;
+      class procedure AdjustCamera(AViewport : TGorillaViewport;
+        AModel : TGorillaModel); static;
+
+      { Environment Mapping Rendering }
+
+      class procedure ClearEnvironmentRendering(ARenderPass : TGorillaRenderPassEnvironment); static;
+      class procedure ToggleEnvironmentRendering(AModel: TGorillaModel;
+        ARenderPass : TGorillaRenderPassEnvironment;
+        const AEnabled : Boolean); static;
   end;
 
 implementation
 
 uses
   System.Masks, System.RTLConsts, FMX.Utils,
-  Gorilla.DefTypes;
+  Gorilla.DefTypes, Gorilla.Utils.Dialogs;
 
 function GetSignedVolumeOfTriangle(const P1, P2, P3 : TPoint3D;
   const ASceneScale : Single) : Single;
@@ -261,6 +282,124 @@ begin
       end;
     end;
   end;
+end;
+
+class procedure TExplodedViewUtils.ResetModel(AModel : TGorillaModel);
+begin
+  if not Assigned(AModel) then
+    Exit;
+
+  // Reset model
+  AModel.Clear();
+  AModel.Position.Point := TPoint3D.Zero;
+  AModel.Scale.Point := TPoint3D.Create(1, 1, 1);
+  AModel.ResetRotationAngle();
+end;
+
+class procedure TExplodedViewUtils.AutoAdjustModelSize(AModel: TGorillaModel;
+  const AReferenceSize: Single);
+var LBBox : TBoundingBox;
+    LSize : TPoint3D;
+    LMaxScale : Single;
+begin
+  // Adjust the size to fit in a cube of AReferenceSize (f.e. 25.0)
+  LBBox := AModel.GetAbsoluteBoundingBox();
+
+  LSize := LBBox.GetSize();
+  LSize.X := AReferenceSize / LSize.X;
+  LSize.Y := AReferenceSize / LSize.Y;
+  LSize.Z := AReferenceSize / LSize.Z;
+  LMaxScale := System.Math.Min(LSize.X, System.Math.Min(LSize.Y, LSize.Z));
+
+  AModel.Scale.X := LMaxScale;
+  AModel.Scale.Y := LMaxScale;
+  AModel.Scale.Z := LMaxScale;
+
+  AModel.Position.Y := 0;
+  AModel.RotationAngle.X := 180;
+end;
+
+class procedure TExplodedViewUtils.AdjustCamera(AViewport : TGorillaViewport;
+  AModel : TGorillaModel);
+var LTotalBox : TBoundingBox;
+    LAspect,
+    LTanHalfAngleOfView,
+    LMaxE  : Single;
+    LCamOfs : Single;
+begin
+  // Reset camera position to zero values
+  AViewport.GetDesignCameraController().SetPositionAndAngle(TPoint3D.Zero,
+    TPoint3D.Zero);
+
+  // Get the absolute size of our models
+  LTotalBox := AModel.GetAbsoluteBoundingBox();
+
+  // Calculate the correct distance to the object
+  LMaxE := System.Math.Max(LTotalBox.Width,
+    System.Math.Max(LTotalBox.Height, LTotalBox.Depth));
+  LAspect := AViewport.Width / AViewport.Height;
+  LTanHalfAngleOfView := DegToRad(AViewport.GetDesignCamera().AngleOfView / 2);
+  LTanHalfAngleOfView := Tan(LTanHalfAngleOfView);
+
+  // Place the camera inside of the camera controller, depending on the aspect
+  // ratio of our viewport.
+  if LAspect > 1 then
+  begin
+    // Wider than taller
+    LCamOfs := LMaxE * (2 * ArcTan(LTanHalfAngleOfView) * LAspect);
+    with AViewport.GetDesignCameraController() do
+    begin
+      SetPositionAndAngle(LTotalBox.CenterPoint, TPoint3D.Zero);
+      Zoom(-LCamOfs);
+    end;
+  end
+  else
+  begin
+    // Taller than wider
+    LCamOfs := LMaxE / (2 * LTanHalfAngleOfView * LAspect);
+    with AViewport.GetDesignCameraController() do
+    begin
+      SetPositionAndAngle(LTotalBox.CenterPoint, TPoint3D.Zero);
+      Zoom(-LCamOfs);
+    end;
+  end;
+end;
+
+class procedure TExplodedViewUtils.ToggleEnvironmentRendering(
+  AModel: TGorillaModel; ARenderPass : TGorillaRenderPassEnvironment;
+  const AEnabled : Boolean);
+begin
+  if not Assigned(AModel) then
+    Exit;
+  if not Assigned(ARenderPass) then
+    Exit;
+
+  // Because rebuilding shaders will also recreate textures, this might take a
+  // while when having 4K textures. So we better show a dialog during the process.
+  Gorilla.Utils.Dialogs.TProgressForm.Open('Rebuilding shaders ...',
+    procedure(AForm : TProgressForm)
+    begin
+      if AEnabled then
+      begin
+        AModel.UnsetAllEnvironmentMappings();
+
+        // Apply environment render pass
+        ARenderPass.IsDynamic := true;
+        ARenderPass.IgnoreControl(AModel);
+        AModel.SetEnvironmentMapping(ARenderPass, 1, 0);
+      end
+      else
+      begin
+        AModel.UnsetAllEnvironmentMappings();
+      end;
+    end);
+end;
+
+class procedure TExplodedViewUtils.ClearEnvironmentRendering(
+  ARenderPass : TGorillaRenderPassEnvironment);
+begin
+  ARenderPass.IgnoredControls.Clear();
+  ARenderPass.AllowedControls.Clear();
 end;
 
 end.
