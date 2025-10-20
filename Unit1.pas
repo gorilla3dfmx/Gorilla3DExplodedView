@@ -75,7 +75,7 @@ type
   end;
 
 const
-  CurrentFilter = '*.dae;*.fbx;*.gltf;*.glb;*.obj;*.stl;*.ply;*.skp' +
+  CurrentFilter = '*.g3d;*.dae;*.fbx;*.gltf;*.glb;*.obj;*.stl;*.ply;*.skp' +
     // additional mayo formats
     ';*.step;*.stp;*.brep;*.rle;*.occ;*.iges;*.igs;*.dxf;*.wrl;*.wrz;*.vrml;*.x;*.3mf;*.3ds;*.amf;*.off';
 
@@ -91,6 +91,7 @@ uses
   ExplodedView.Utils, Gorilla.Camera,
   Gorilla.Utils.Dialogs, Gorilla.Utils.Math,
   Gorilla.DefTypes,
+  Gorilla.G3D.Loader,
   Gorilla.DAE.Loader,
   Gorilla.FBX.Loader,
   Gorilla.GLTF.Loader,
